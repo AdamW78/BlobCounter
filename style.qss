@@ -1,0 +1,87 @@
+QWidget {
+    font-family: Arial, sans-serif;
+    font-size: 11px; /* Further reduced font size */
+    background-color: #2b2b2b;
+    color: #f0f0f0;
+}
+
+QLabel#sliderTitleLabel {
+    color: #f0f0f0;
+    font-weight: 900; /* Make slider title labels much bolder */
+}
+
+QLineEdit {
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 1px; /* Further reduced padding */
+    background-color: #3b3b3b;
+    color: #f0f0f0;
+}
+
+QSlider::groove:horizontal {
+    border: 1px solid palette(highlight); /* Use OS accent color */
+    background: palette(highlight); /* Use OS accent color */
+    height: 4px; /* Increase height */
+    border-radius: 2px;
+}
+
+QSlider::handle:horizontal {
+    background: #f0f0f0; /* Light color for contrast */
+    border: 1px solid #888;
+    width: 16px; /* Increase width */
+    height: 16px; /* Increase height */
+    border-radius: 8px; /* Make it circular */
+    margin: -6px 0; /* Center the handle vertically */
+}
+
+QPushButton {
+    background-color: #444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 8px; /* Further reduced padding */
+    font-weight: bold; /* Make button labels bold */
+}
+
+QPushButton:hover {
+    background-color: #555;
+}
+
+QPushButton::icon {
+    width: 12px; /* Further reduced icon size */
+    height: 12px; /* Further reduced icon size */
+}
+
+QPushButton::icon:active {
+    width: 12px; /* Further reduced icon size */
+    height: 12px; /* Further reduced icon size */
+}
+
+QCheckBox {
+    padding: 1px; /* Further reduced padding */
+    color: #f0f0f0;
+}
+
+QGraphicsView {
+    border: 1px solid #555;
+    background-color: #3b3b3b;
+}
+
+QGroupBox {
+    border: 1px solid #555;
+    border-radius: 4px;
+    margin-top: 3px; /* Further reduced margin */
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 2px;
+}
+
+QVBoxLayout > QHBoxLayout {
+    border: 1px solid #555; /* Add border around each slider */
+    border-radius: 4px;
+    padding: 1px; /* Further reduced padding */
+    margin-bottom: 2px; /* Further reduced margin */
+}
