@@ -204,6 +204,8 @@ class ImageSetBlobDetector(QWidget):
         max_threshold = int(self.max_threshold_input.text())
         apply_gaussian_blur = self.gaussian_blur_checkbox.isChecked()
         apply_morphological_operations = self.morphological_operations_checkbox.isChecked()
+
+        # Remove invalid widgets
         i = self.blob_detector_stack.count() - 1
         while i >= 0:
             cur_logic = self.blob_detector_stack.widget(i).blob_detector_logic
@@ -212,59 +214,114 @@ class ImageSetBlobDetector(QWidget):
                 self.image_list_widget.takeItem(i)
                 logging.debug("Image list widget removed at index: %s", i)
             i -= 1
-        self.progress_dialog = self.show_progress_dialog(self.blob_detector_stack.count() + 1, "Counting Blobs...",
+
+        # Show progress dialog
+        self.progress_dialog = self.show_progress_dialog(self.blob_detector_stack.count(), "Counting Blobs...",
                                                          "Cancel")
         self.progress_dialog.setAutoClose(False)
         self.progress_dialog.setAutoReset(False)
         self.progress_dialog.setValue(0)
         QApplication.processEvents()
 
-        self.threads = []
-        self.workers = []
-        self.completed_tasks = 0
-
-        def update_progress():
-            self.completed_tasks += 1
-            self.progress_dialog.setValue(self.completed_tasks)
-            QApplication.processEvents()
-
+        # Process each widget sequentially
         for i in range(self.blob_detector_stack.count()):
             ui = self.blob_detector_stack.widget(i)
-            ui = ui if isinstance(ui, BlobDetectorUI) else None
+            if not isinstance(ui, BlobDetectorUI):
+                continue
             logic = ui.blob_detector_logic
             if logic.image_path is None:
                 continue
-            worker = BlobCounterWorker(logic, min_area, max_area, min_circularity, min_convexity, min_inertia_ratio,
-                                       min_dist_between_blobs, min_threshold, max_threshold, apply_gaussian_blur,
-                                       apply_morphological_operations)
-            thread = QThread()
-            worker.moveToThread(thread)
-            worker.progress.connect(update_progress)
-            worker.finished.connect(thread.quit)
-            worker.finished.connect(worker.deleteLater)
-            thread.finished.connect(thread.deleteLater)
-            worker.error.connect(lambda e: logging.error(f"Error counting blobs: {e}"))
-            thread.started.connect(worker.run)
-            self.threads.append(thread)
-            self.workers.append(worker)
-            thread.start()
 
-        start_time = time()
-        timeout = 60  # Timeout in seconds
+            # Create and run the worker
+            worker = BlobCounterWorker(
+                logic, min_area, max_area, min_circularity, min_convexity, min_inertia_ratio,
+                min_dist_between_blobs, min_threshold, max_threshold, apply_gaussian_blur,
+                apply_morphological_operations
+            )
+            try:
+                worker.run()  # Directly call the run method
+                self.progress_dialog.setValue(i + 1)
+                QApplication.processEvents()
+            except Exception as e:
+                logging.error(f"Error counting blobs: {e}")
 
-        while self.progress_dialog.isVisible():
-            sleep(0.01)
-            QApplication.processEvents()
-            if self.completed_tasks >= self.blob_detector_stack.count():
-                self.update_displayed_blob_counts_finished_loading()
-                self.progress_dialog.setValue(self.progress_dialog.value() + 1)
-                logging.debug("All tasks completed, closing progress dialog.")
-                self.progress_dialog.close()
-                break
-            if time() - start_time > timeout:
-                logging.warning("Timeout reached, forcing progress dialog to close.")
-                self.progress_dialog.close()
-                break
+        # Finalize progress dialog
+        self.update_displayed_blob_counts_finished_loading()
+        self.progress_dialog.close()
+
+    # def count_all_blobs(self):
+    #     # Update universal settings
+    #     min_area = int(self.min_area_input.text())
+    #     max_area = int(self.max_area_input.text())
+    #     min_circularity = float(self.min_circularity_input.text()) / 100.0
+    #     min_convexity = float(self.min_convexity_input.text()) / 100.0
+    #     min_inertia_ratio = float(self.min_inertia_ratio_input.text()) / 100.0
+    #     min_dist_between_blobs = int(self.min_dist_between_blobs_input.text())
+    #     min_threshold = int(self.min_threshold_input.text())
+    #     max_threshold = int(self.max_threshold_input.text())
+    #     apply_gaussian_blur = self.gaussian_blur_checkbox.isChecked()
+    #     apply_morphological_operations = self.morphological_operations_checkbox.isChecked()
+    #     i = self.blob_detector_stack.count() - 1
+    #     while i >= 0:
+    #         cur_logic = self.blob_detector_stack.widget(i).blob_detector_logic
+    #         if cur_logic.image_path is None:
+    #             self.blob_detector_stack.removeWidget(cur_logic)
+    #             self.image_list_widget.takeItem(i)
+    #             logging.debug("Image list widget removed at index: %s", i)
+    #         i -= 1
+    #     self.progress_dialog = self.show_progress_dialog(self.blob_detector_stack.count() + 1, "Counting Blobs...",
+    #                                                      "Cancel")
+    #     self.progress_dialog.setAutoClose(False)
+    #     self.progress_dialog.setAutoReset(False)
+    #     self.progress_dialog.setValue(0)
+    #     QApplication.processEvents()
+    #
+    #     self.threads = []
+    #     self.workers = []
+    #     self.completed_tasks = 0
+    #
+    #     def update_progress():
+    #         self.completed_tasks += 1
+    #         self.progress_dialog.setValue(self.completed_tasks)
+    #         QApplication.processEvents()
+    #
+    #     for i in range(self.blob_detector_stack.count()):
+    #         ui = self.blob_detector_stack.widget(i)
+    #         ui = ui if isinstance(ui, BlobDetectorUI) else None
+    #         logic = ui.blob_detector_logic
+    #         if logic.image_path is None:
+    #             continue
+    #         worker = BlobCounterWorker(logic, min_area, max_area, min_circularity, min_convexity, min_inertia_ratio,
+    #                                    min_dist_between_blobs, min_threshold, max_threshold, apply_gaussian_blur,
+    #                                    apply_morphological_operations)
+    #         thread = QThread()
+    #         worker.moveToThread(thread)
+    #         worker.progress.connect(update_progress)
+    #         worker.finished.connect(thread.quit)
+    #         worker.finished.connect(worker.deleteLater)
+    #         thread.finished.connect(thread.deleteLater)
+    #         worker.error.connect(lambda e: logging.error(f"Error counting blobs: {e}"))
+    #         thread.started.connect(worker.run)
+    #         self.threads.append(thread)
+    #         self.workers.append(worker)
+    #         thread.start()
+    #
+    #     start_time = time()
+    #     timeout = 60  # Timeout in seconds
+    #
+    #     while self.progress_dialog.isVisible():
+    #         sleep(0.01)
+    #         QApplication.processEvents()
+    #         if self.completed_tasks >= self.blob_detector_stack.count():
+    #             self.update_displayed_blob_counts_finished_loading()
+    #             self.progress_dialog.setValue(self.progress_dialog.value() + 1)
+    #             logging.debug("All tasks completed, closing progress dialog.")
+    #             self.progress_dialog.close()
+    #             break
+    #         if time() - start_time > timeout:
+    #             logging.warning("Timeout reached, forcing progress dialog to close.")
+    #             self.progress_dialog.close()
+    #             break
 
     def __update_displayed_blob_counts__(self):
         for i in range(self.blob_detector_stack.count()):
