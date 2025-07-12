@@ -1,7 +1,4 @@
 import logging
-import os
-from os.path import join, abspath
-from typing import LiteralString
 
 from PySide6.QtWidgets import QApplication, QMessageBox
 import sys
@@ -14,31 +11,27 @@ from utils import DEFAULT_IMAGE_PATH
 if __name__ == "__main__":
     app = QApplication([])
 
-    def resource_path(relative_path) -> LiteralString | str | bytes:
-        if hasattr(sys, '_MEIPASS'):
-            return join(sys._MEIPASS, relative_path)
-        return join(abspath("."), relative_path)
-
     # Load and apply the stylesheet
-    with open(resource_path("style.qss"), "r") as file:
+    with open("style.qss", "r") as file:
         app.setStyleSheet(file.read())
 
-    # Handle command line arguments for mode
     if len(sys.argv) != 2:
-        mode = "image_set"
-        logging.warning("No mode specified. Defaulting to image_set mode.")
-    else:
-        mode = sys.argv[1]
+        QMessageBox.critical(None, "Error", "Usage: main.py <mode>\nModes: image_set, single_blob")
+        sys.exit(1)
 
-    # Load the program into the correct mode
-    if mode == "single_image":
+    mode = sys.argv[1]
+
+    if mode == "image_set":
+        widget = ImageSetBlobDetector()
+    elif mode == "single_image":
         blob_detector_logic = BlobDetectorLogic(DEFAULT_IMAGE_PATH)
         logging.debug("Single image mode")
         logging.debug("Image path: %s", blob_detector_logic.image_path)
         widget = BlobDetectorUI(blob_detector_logic)
         widget.update_display_image()  # Ensure the image is displayed
-    elif mode == "image_set":
-        widget = ImageSetBlobDetector()
+    else:
+        QMessageBox.critical(None, "Error", f"Unknown mode: {mode}\nModes: image_set, single_blob")
+        sys.exit(1)
 
     widget.show()
     app.exec()

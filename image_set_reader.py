@@ -4,7 +4,6 @@ from time import sleep, time
 from PySide6.QtGui import QWheelEvent
 
 from blob_counter_worker import BlobCounterWorker
-from ui_utils import UIUtils
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -15,12 +14,21 @@ import xml.etree.ElementTree as ET
 import cv2
 from PySide6.QtCore import Qt, QEvent, QThread
 from PySide6.QtWidgets import QListWidget, QFileDialog, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, \
-    QApplication, QGroupBox, QStackedWidget, QCheckBox, QProgressDialog, QMessageBox
+    QApplication, QGroupBox, QStackedWidget, QProgressDialog, QMessageBox
 
 from blob_detector_ui import BlobDetectorUI
 from excel_output import ExcelOutput
 from logger import LOGGER
 from utils import DEFAULT_DILUTION, IMAGE_LIST_WIDGET_WIDTH
+
+
+def extract_sample_number(item_text):
+    parts = item_text.split(' ')
+    for part in parts:
+        if part.startswith("Sample") and part[6:].isdigit():
+            return int(part[6:])
+    return -1  # Default value if no sample number is found
+
 
 class ImageSetBlobDetector(QWidget):
     def __init__(self):
@@ -43,12 +51,12 @@ class ImageSetBlobDetector(QWidget):
         self.layout.addWidget(self.blob_detector_stack)
         self.progress_dialog = None
 
-        # Add universal blob detector settings
-        self.create_universal_blob_detector_settings()
-
         # Add a blank BlobDetectorUI widget initially
         blank_blob_detector = BlobDetectorUI(image_path=None, image_set_reader=self)
         self.blob_detector_stack.addWidget(blank_blob_detector)
+
+        # Create tools panel
+        self.create_tools_panel()
 
         # Install event filters for zooming
         self.installEventFilter(self)
@@ -72,37 +80,10 @@ class ImageSetBlobDetector(QWidget):
                 return True
         return super().eventFilter(source, event)
 
-    def create_universal_blob_detector_settings(self):
-        self.controls_group_box = QGroupBox("Blob Detection Parameters - All Images")
+    def create_tools_panel(self):
+        self.controls_group_box = QGroupBox("Tools")
         self.controls_layout = QVBoxLayout()
         self.controls_group_box.setLayout(self.controls_layout)
-
-        sliders = UIUtils.create_blob_detector_sliders()
-        self.min_area_group_box, self.min_area_slider, self.min_area_input = sliders['min_area']
-        self.max_area_group_box, self.max_area_slider, self.max_area_input = sliders['max_area']
-        self.min_circularity_group_box, self.min_circularity_slider, self.min_circularity_input = sliders[
-            'min_circularity']
-        self.min_convexity_group_box, self.min_convexity_slider, self.min_convexity_input = sliders['min_convexity']
-        self.min_inertia_ratio_group_box, self.min_inertia_ratio_slider, self.min_inertia_ratio_input = sliders[
-            'min_inertia_ratio']
-        self.min_dist_between_blobs_group_box, self.min_dist_between_blobs_slider, self.min_dist_between_blobs_input = \
-        sliders['min_dist_between_blobs']
-        self.min_threshold_group_box, self.min_threshold_slider, self.min_threshold_input = sliders['min_threshold']
-        self.max_threshold_group_box, self.max_threshold_slider, self.max_threshold_input = sliders['max_threshold']
-
-        self.controls_layout.addWidget(self.min_area_group_box)
-        self.controls_layout.addWidget(self.max_area_group_box)
-        self.controls_layout.addWidget(self.min_circularity_group_box)
-        self.controls_layout.addWidget(self.min_convexity_group_box)
-        self.controls_layout.addWidget(self.min_inertia_ratio_group_box)
-        self.controls_layout.addWidget(self.min_dist_between_blobs_group_box)
-        self.controls_layout.addWidget(self.min_threshold_group_box)
-        self.controls_layout.addWidget(self.max_threshold_group_box)
-
-        self.gaussian_blur_checkbox = QCheckBox('Apply Gaussian Blur')
-        self.morphological_operations_checkbox = QCheckBox('Apply Morphological Operations')
-        self.controls_layout.addWidget(self.gaussian_blur_checkbox)
-        self.controls_layout.addWidget(self.morphological_operations_checkbox)
 
         self.open_folder_button = QPushButton('Open Image Set Folder...')
         # self.open_folder_button.setIcon(QIcon('icons/open.svg'))
@@ -193,19 +174,6 @@ class ImageSetBlobDetector(QWidget):
         return progress_dialog
 
     def count_all_blobs(self):
-        # Update universal settings
-        min_area = int(self.min_area_input.text())
-        max_area = int(self.max_area_input.text())
-        min_circularity = float(self.min_circularity_input.text()) / 100.0
-        min_convexity = float(self.min_convexity_input.text()) / 100.0
-        min_inertia_ratio = float(self.min_inertia_ratio_input.text()) / 100.0
-        min_dist_between_blobs = int(self.min_dist_between_blobs_input.text())
-        min_threshold = int(self.min_threshold_input.text())
-        max_threshold = int(self.max_threshold_input.text())
-        apply_gaussian_blur = self.gaussian_blur_checkbox.isChecked()
-        apply_morphological_operations = self.morphological_operations_checkbox.isChecked()
-
-        # Remove invalid widgets
         i = self.blob_detector_stack.count() - 1
         while i >= 0:
             cur_logic = self.blob_detector_stack.widget(i).blob_detector_logic
@@ -214,114 +182,57 @@ class ImageSetBlobDetector(QWidget):
                 self.image_list_widget.takeItem(i)
                 logging.debug("Image list widget removed at index: %s", i)
             i -= 1
-
-        # Show progress dialog
-        self.progress_dialog = self.show_progress_dialog(self.blob_detector_stack.count(), "Counting Blobs...",
+        self.progress_dialog = self.show_progress_dialog(self.blob_detector_stack.count() + 1, "Counting Blobs...",
                                                          "Cancel")
         self.progress_dialog.setAutoClose(False)
         self.progress_dialog.setAutoReset(False)
         self.progress_dialog.setValue(0)
         QApplication.processEvents()
 
-        # Process each widget sequentially
+        self.threads = []
+        self.workers = []
+        self.completed_tasks = 0
+
+        def update_progress():
+            self.completed_tasks += 1
+            self.progress_dialog.setValue(self.completed_tasks)
+            QApplication.processEvents()
+
         for i in range(self.blob_detector_stack.count()):
             ui = self.blob_detector_stack.widget(i)
-            if not isinstance(ui, BlobDetectorUI):
-                continue
+            ui = ui if isinstance(ui, BlobDetectorUI) else None
             logic = ui.blob_detector_logic
             if logic.image_path is None:
                 continue
+            worker = BlobCounterWorker(logic)
+            thread = QThread()
+            worker.moveToThread(thread)
+            worker.progress.connect(update_progress)
+            worker.finished.connect(thread.quit)
+            worker.finished.connect(worker.deleteLater)
+            thread.finished.connect(thread.deleteLater)
+            worker.error.connect(lambda e: logging.error(f"Error counting blobs: {e}"))
+            thread.started.connect(worker.run)
+            self.threads.append(thread)
+            self.workers.append(worker)
+            thread.start()
 
-            # Create and run the worker
-            worker = BlobCounterWorker(
-                logic, min_area, max_area, min_circularity, min_convexity, min_inertia_ratio,
-                min_dist_between_blobs, min_threshold, max_threshold, apply_gaussian_blur,
-                apply_morphological_operations
-            )
-            try:
-                worker.run()  # Directly call the run method
-                self.progress_dialog.setValue(i + 1)
-                QApplication.processEvents()
-            except Exception as e:
-                logging.error(f"Error counting blobs: {e}")
+        start_time = time()
+        timeout = 30000  # Timeout in seconds
 
-        # Finalize progress dialog
-        self.update_displayed_blob_counts_finished_loading()
-        self.progress_dialog.close()
-
-    # def count_all_blobs(self):
-    #     # Update universal settings
-    #     min_area = int(self.min_area_input.text())
-    #     max_area = int(self.max_area_input.text())
-    #     min_circularity = float(self.min_circularity_input.text()) / 100.0
-    #     min_convexity = float(self.min_convexity_input.text()) / 100.0
-    #     min_inertia_ratio = float(self.min_inertia_ratio_input.text()) / 100.0
-    #     min_dist_between_blobs = int(self.min_dist_between_blobs_input.text())
-    #     min_threshold = int(self.min_threshold_input.text())
-    #     max_threshold = int(self.max_threshold_input.text())
-    #     apply_gaussian_blur = self.gaussian_blur_checkbox.isChecked()
-    #     apply_morphological_operations = self.morphological_operations_checkbox.isChecked()
-    #     i = self.blob_detector_stack.count() - 1
-    #     while i >= 0:
-    #         cur_logic = self.blob_detector_stack.widget(i).blob_detector_logic
-    #         if cur_logic.image_path is None:
-    #             self.blob_detector_stack.removeWidget(cur_logic)
-    #             self.image_list_widget.takeItem(i)
-    #             logging.debug("Image list widget removed at index: %s", i)
-    #         i -= 1
-    #     self.progress_dialog = self.show_progress_dialog(self.blob_detector_stack.count() + 1, "Counting Blobs...",
-    #                                                      "Cancel")
-    #     self.progress_dialog.setAutoClose(False)
-    #     self.progress_dialog.setAutoReset(False)
-    #     self.progress_dialog.setValue(0)
-    #     QApplication.processEvents()
-    #
-    #     self.threads = []
-    #     self.workers = []
-    #     self.completed_tasks = 0
-    #
-    #     def update_progress():
-    #         self.completed_tasks += 1
-    #         self.progress_dialog.setValue(self.completed_tasks)
-    #         QApplication.processEvents()
-    #
-    #     for i in range(self.blob_detector_stack.count()):
-    #         ui = self.blob_detector_stack.widget(i)
-    #         ui = ui if isinstance(ui, BlobDetectorUI) else None
-    #         logic = ui.blob_detector_logic
-    #         if logic.image_path is None:
-    #             continue
-    #         worker = BlobCounterWorker(logic, min_area, max_area, min_circularity, min_convexity, min_inertia_ratio,
-    #                                    min_dist_between_blobs, min_threshold, max_threshold, apply_gaussian_blur,
-    #                                    apply_morphological_operations)
-    #         thread = QThread()
-    #         worker.moveToThread(thread)
-    #         worker.progress.connect(update_progress)
-    #         worker.finished.connect(thread.quit)
-    #         worker.finished.connect(worker.deleteLater)
-    #         thread.finished.connect(thread.deleteLater)
-    #         worker.error.connect(lambda e: logging.error(f"Error counting blobs: {e}"))
-    #         thread.started.connect(worker.run)
-    #         self.threads.append(thread)
-    #         self.workers.append(worker)
-    #         thread.start()
-    #
-    #     start_time = time()
-    #     timeout = 60  # Timeout in seconds
-    #
-    #     while self.progress_dialog.isVisible():
-    #         sleep(0.01)
-    #         QApplication.processEvents()
-    #         if self.completed_tasks >= self.blob_detector_stack.count():
-    #             self.update_displayed_blob_counts_finished_loading()
-    #             self.progress_dialog.setValue(self.progress_dialog.value() + 1)
-    #             logging.debug("All tasks completed, closing progress dialog.")
-    #             self.progress_dialog.close()
-    #             break
-    #         if time() - start_time > timeout:
-    #             logging.warning("Timeout reached, forcing progress dialog to close.")
-    #             self.progress_dialog.close()
-    #             break
+        while self.progress_dialog.isVisible():
+            sleep(0.01)
+            QApplication.processEvents()
+            if self.completed_tasks >= self.blob_detector_stack.count():
+                self.update_displayed_blob_counts_finished_loading()
+                self.progress_dialog.setValue(self.progress_dialog.value() + 1)
+                logging.debug("All tasks completed, closing progress dialog.")
+                self.progress_dialog.close()
+                break
+            if time() - start_time > timeout:
+                logging.warning("Timeout reached, forcing progress dialog to close.")
+                self.progress_dialog.close()
+                break
 
     def __update_displayed_blob_counts__(self):
         for i in range(self.blob_detector_stack.count()):
@@ -360,13 +271,6 @@ class ImageSetBlobDetector(QWidget):
         list_name = blob_detector_logic.get_custom_name(DEFAULT_DILUTION)
         self.image_list_widget.addItem(f"{list_name}")
         self.timepoints.append(blob_detector_logic.get_timepoint())
-
-    def extract_sample_number(self, item_text):
-        parts = item_text.split(' ')
-        for part in parts:
-            if part.startswith("Sample") and part[6:].isdigit():
-                return int(part[6:])
-        return -1  # Default value if no sample number is found
 
     def update_image_list(self):
         old_selected_index = self.image_list_widget.selectedIndexes()[

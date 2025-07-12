@@ -14,6 +14,7 @@ from utils import DEFAULT_MIN_AREA, DEFAULT_MIN_CIRCULARITY, DEFAULT_MAX_AREA, D
     DEFAULT_MIN_INERTIA_RATIO, DEFAULT_BLOB_COLOR, MIN_DISTANCE_BETWEEN_BLOBS, DEFAULT_MIN_THRESHOLD, \
     DEFAULT_MAX_THRESHOLD, CIRCLE_COLOR, CIRCLE_THICKNESS, DEFAULT_DILUTION, USE_DAY, Timepoint, USE_DILUTION, \
     NEW_KEYPOINT_SIZE
+from blob_counter import YOLOBlobCounter
 
 class BlobDetectorLogic(QObject):
 
@@ -31,7 +32,7 @@ class BlobDetectorLogic(QObject):
         self.keypoints = []
         self.contours = []
         self.params = self.create_blob_detector_params()
-        self.detector = cv2.SimpleBlobDetector_create(self.params)
+        self.yolo_blob_counter = YOLOBlobCounter(model_path="yolo11x.pt")  # Path to YOLO model weights
         self.custom_name = None
         self.day_num = -1
         self.sample_number = -1
@@ -43,10 +44,22 @@ class BlobDetectorLogic(QObject):
             self.update_timepoint()
         self.new_keypoint_size = NEW_KEYPOINT_SIZE  # Default size for new keypoints
 
+    def resize_and_crop(self, image):
+        # Resize so height is 1024
+        h, w = image.shape[:2]
+        scale = 1024 / h
+        new_w = int(w * scale)
+        resized = cv2.resize(image, (new_w, 1024), interpolation=cv2.INTER_AREA)
+        # Crop width to 1024, centered
+        start_x = max((new_w - 1024) // 2, 0)
+        cropped = resized[:, start_x:start_x + 1024]
+        return cropped
+
     def load_image(self):
         self.image = cv2.imread(self.image_path, 1)
         if self.image is None:
             raise FileNotFoundError(f"Image not found at path: {self.image_path}")
+        self.image = self.resize_and_crop(self.image)
 
     def update_timepoint(self):
         self.timepoint = Timepoint(day=self.day_num, sample_number=self.sample_number, dilution=self.dilution,
@@ -78,49 +91,15 @@ class BlobDetectorLogic(QObject):
 
     def detect_blobs(self):
         # logging.debug(self.detector)
-        self.keypoints = list(self.detector.detect(self.gray_image))
+        # Use YOLOBlobCounter for blob detection
+        self.keypoints = self.yolo_blob_counter.count_blobs(self.image)
         self.update_timepoint()
         self.keypoints_changed.emit(len(self.keypoints))  # Ensure this signal is emitted
 
-    def update_blob_count(self, min_area, max_area, min_circularity, min_convexity, min_inertia_ratio,
-                          min_dist_between_blobs, apply_gaussian_blur, apply_morphological_operations,
-                          min_threshold=DEFAULT_MIN_THRESHOLD, max_threshold=DEFAULT_MAX_THRESHOLD):
-        #logging.debug("Starting update_blob_count for Sample #%s", self.timepoint.sample_number)
-        self.params.minArea = min_area
-        self.params.maxArea = max_area
-        self.params.minCircularity = min_circularity
-        self.params.minConvexity = min_convexity
-        self.params.minInertiaRatio = min_inertia_ratio
-        self.params.minDistBetweenBlobs = min_dist_between_blobs
-        self.params.minThreshold = min_threshold
-        self.params.maxThreshold = max_threshold
-        self.detector = cv2.SimpleBlobDetector_create(self.params)
 
-        #logging.debug(f"Updated Blob Detector Params: minArea={min_area}, maxArea={max_area}, "
-                      #f"minCircularity={min_circularity}, minConvexity={min_convexity}, "
-                      #f"minInertiaRatio={min_inertia_ratio}, minDistBetweenBlobs={min_dist_between_blobs}, "
-                      #f"minThreshold={min_threshold}, maxThreshold={max_threshold}")
-
-        self.convert_to_grayscale()
-        #logging.debug(f"Converted image corresponding to sample #{self.timepoint.sample_number} to grayscale")
-
-        if apply_gaussian_blur:
-            self.gray_image = cv2.GaussianBlur(self.gray_image, (5, 5), 0)
-            #logging.debug(f"Applied Gaussian Blur to image corresponding to Sample #{self.timepoint.sample_number}")
-
-        if apply_morphological_operations:
-            kernel = np.ones((5, 5), np.uint8)
-            self.gray_image = cv2.erode(self.gray_image, kernel, iterations=1)
-            self.gray_image = cv2.dilate(self.gray_image, kernel, iterations=1)
-            #logging.debug(f"Applied Morphological Operations to image corresponding to Sample #{self.timepoint.sample_number}")
-
-        self.detect_blobs()
-        #logging.debug(f"Blob detection completed for Sample #{self.timepoint.sample_number}")
-
+    def update_blob_count(self):
+        self.yolo_blob_counter = YOLOBlobCounter(model_path="yolo11x.pt")
         self.update_timepoint()
-        #logging.debug(f"Timepoint updated for Sample #{self.timepoint.sample_number}")
-        #logging.debug(f"Emitted keypoints_changed signal for Sample #{self.timepoint.sample_number}")
-        #logging.debug(f"Completed update_blob_count for Sample #{self.timepoint.sample_number} - found {len(self.keypoints)} keypoints.")
         self.keypoints_changed.emit(len(self.keypoints))
 
     def get_dilution_string(self, dilution_str: str, default_dilution: str):

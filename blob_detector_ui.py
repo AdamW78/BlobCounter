@@ -45,28 +45,28 @@ class BlobDetectorUI(QWidget):
         self.keypoint_count_label = QLabel('Keypoints: 0')
         self.layout.addWidget(self.keypoint_count_label)
 
-        sliders = UIUtils.create_blob_detector_sliders()
-        self.min_area_group_box, self.min_area_slider, self.min_area_input = sliders['min_area']
-        self.max_area_group_box, self.max_area_slider, self.max_area_input = sliders['max_area']
-        self.min_circularity_group_box, self.min_circularity_slider, self.min_circularity_input = sliders[
-            'min_circularity']
-        self.min_convexity_group_box, self.min_convexity_slider, self.min_convexity_input = sliders['min_convexity']
-        self.min_inertia_ratio_group_box, self.min_inertia_ratio_slider, self.min_inertia_ratio_input = sliders[
-            'min_inertia_ratio']
-        self.min_dist_between_blobs_group_box, self.min_dist_between_blobs_slider, self.min_dist_between_blobs_input = \
-        sliders['min_dist_between_blobs']
-
-        self.layout.addWidget(self.min_area_group_box)
-        self.layout.addWidget(self.max_area_group_box)
-        self.layout.addWidget(self.min_circularity_group_box)
-        self.layout.addWidget(self.min_convexity_group_box)
-        self.layout.addWidget(self.min_inertia_ratio_group_box)
-        self.layout.addWidget(self.min_dist_between_blobs_group_box)
-
-        self.gaussian_blur_checkbox = QCheckBox('Apply Gaussian Blur')
-        self.morphological_operations_checkbox = QCheckBox('Apply Morphological Operations')
-        self.layout.addWidget(self.gaussian_blur_checkbox)
-        self.layout.addWidget(self.morphological_operations_checkbox)
+        # sliders = UIUtils.create_blob_detector_sliders()
+        # self.min_area_group_box, self.min_area_slider, self.min_area_input = sliders['min_area']
+        # self.max_area_group_box, self.max_area_slider, self.max_area_input = sliders['max_area']
+        # self.min_circularity_group_box, self.min_circularity_slider, self.min_circularity_input = sliders[
+        #     'min_circularity']
+        # self.min_convexity_group_box, self.min_convexity_slider, self.min_convexity_input = sliders['min_convexity']
+        # self.min_inertia_ratio_group_box, self.min_inertia_ratio_slider, self.min_inertia_ratio_input = sliders[
+        #     'min_inertia_ratio']
+        # self.min_dist_between_blobs_group_box, self.min_dist_between_blobs_slider, self.min_dist_between_blobs_input = \
+        # sliders['min_dist_between_blobs']
+        #
+        # self.layout.addWidget(self.min_area_group_box)
+        # self.layout.addWidget(self.max_area_group_box)
+        # self.layout.addWidget(self.min_circularity_group_box)
+        # self.layout.addWidget(self.min_convexity_group_box)
+        # self.layout.addWidget(self.min_inertia_ratio_group_box)
+        # self.layout.addWidget(self.min_dist_between_blobs_group_box)
+        #
+        # self.gaussian_blur_checkbox = QCheckBox('Apply Gaussian Blur')
+        # self.morphological_operations_checkbox = QCheckBox('Apply Morphological Operations')
+        # self.layout.addWidget(self.gaussian_blur_checkbox)
+        # self.layout.addWidget(self.morphological_operations_checkbox)
 
         self.recount_button = QPushButton('Count Blobs')
         # self.recount_button.setIcon(QIcon('icons/recount.svg'))
@@ -102,37 +102,25 @@ class BlobDetectorUI(QWidget):
 
     def disable_all_widgets(self):
         self.keypoint_count_label.setEnabled(False)
-        self.min_area_slider.setEnabled(False)
-        self.min_area_input.setEnabled(False)
-        self.max_area_slider.setEnabled(False)
-        self.max_area_input.setEnabled(False)
-        self.min_circularity_slider.setEnabled(False)
-        self.min_circularity_input.setEnabled(False)
-        self.min_convexity_slider.setEnabled(False)
-        self.min_convexity_input.setEnabled(False)
-        self.min_inertia_ratio_slider.setEnabled(False)
-        self.min_inertia_ratio_input.setEnabled(False)
-        self.min_dist_between_blobs_slider.setEnabled(False)
-        self.min_dist_between_blobs_input.setEnabled(False)
-        self.gaussian_blur_checkbox.setEnabled(False)
-        self.morphological_operations_checkbox.setEnabled(False)
+        # self.min_area_slider.setEnabled(False)
+        # self.min_area_input.setEnabled(False)
+        # self.max_area_slider.setEnabled(False)
+        # self.max_area_input.setEnabled(False)
+        # self.min_circularity_slider.setEnabled(False)
+        # self.min_circularity_input.setEnabled(False)
+        # self.min_convexity_slider.setEnabled(False)
+        # self.min_convexity_input.setEnabled(False)
+        # self.min_inertia_ratio_slider.setEnabled(False)
+        # self.min_inertia_ratio_input.setEnabled(False)
+        # self.min_dist_between_blobs_slider.setEnabled(False)
+        # self.min_dist_between_blobs_input.setEnabled(False)
+        # self.gaussian_blur_checkbox.setEnabled(False)
+        # self.morphological_operations_checkbox.setEnabled(False)
         self.recount_button.setEnabled(False)
         self.graphics_view.setEnabled(False)
 
     def update_blob_count(self):
-        min_area = int(self.min_area_input.text())
-        max_area = int(self.max_area_input.text())
-        min_circularity = float(self.min_circularity_input.text()) / 100.0
-        min_convexity = float(self.min_convexity_input.text()) / 100.0
-        min_inertia_ratio = float(self.min_inertia_ratio_input.text()) / 100.0
-        min_dist_between_blobs = int(self.min_dist_between_blobs_input.text())
-        apply_gaussian_blur = self.gaussian_blur_checkbox.isChecked()
-        apply_morphological_operations = self.morphological_operations_checkbox.isChecked()
-
-        self.blob_detector_logic.update_blob_count(
-            min_area, max_area, min_circularity, min_convexity, min_inertia_ratio, min_dist_between_blobs,
-            apply_gaussian_blur, apply_morphological_operations
-        )
+        self.blob_detector_logic.update_blob_count()
         self.update_display_image()
         QApplication.processEvents()  # Process the event loop to update the UI
 
